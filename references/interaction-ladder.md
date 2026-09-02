@@ -4,15 +4,28 @@ How to choose *how* to make something happen in the game.
 
 ## The ordering principle
 
-> **Use the primitive that forges the least state.**
+> **Absent a measurement, prefer the primitive that forges the least state.**
 
-Not "what is hardest to notice" — that framing leads to fragile code. Forging less
-state means fewer assumptions about how the game works, which means fewer things a
-game update can break. It also happens to diverge least from what a normal client
-does, which is why the robust choice and the durable choice are the same choice.
+Forging less state means fewer assumptions about how the game works, which means
+fewer things a game update can break. (Not "what is hardest to notice" — that
+framing leads to fragile code.)
 
-Work top-down. **Dropping a rung requires a reason you can state**, and that reason
-belongs in a code comment next to the call.
+**This ordering is a default prior, not a permission ladder.** It tells you where to
+start looking when you know nothing about a target. Once you have measured, choose by
+measured cost: throughput, latency, and how much maintenance the choice will cost
+when the game updates. A lower rung that is demonstrably faster and holds up is the
+right answer, and picking it needs a note in a comment saying what you measured —
+not a justification for going lower.
+
+The two directions genuinely do agree more often than not, which is the useful part:
+the measured-cheapest option is usually also the highest rung. `Garden.CollectFruit`
+below is the canonical case — the remote (rung 1) beat teleport-and-prompt (rung 4)
+on both robustness *and* speed. But when they disagree, the measurement wins.
+
+The one asymmetry worth keeping in mind: rung 5 is the fastest to *react* (it is
+event-driven, with no interval to wait out) and the most expensive to *maintain*
+(first thing to break on a game update). Trading maintenance for latency is a real
+trade and sometimes the right one — see `throughput.md`.
 
 ## The rungs
 
@@ -99,6 +112,10 @@ quirks:
 ## Deciding, concretely
 
 1. Run `snippets/probe-interaction.lua` against the target.
-2. Take the highest rung it reports as available.
-3. Write the reason in a comment if you went lower.
-4. Verify acceptance against observable state, not against `pcall`.
+2. Start at the highest rung it reports as available.
+3. Measure what that actually costs — per-item latency, and whether it needs a
+   teleport. `throughput.md` has the procedure.
+4. Take a lower rung when the measurement says it is cheaper, and record the number
+   you measured in a comment so the next person can re-check it instead of
+   re-deriving it.
+5. Verify acceptance against observable state, not against `pcall`.

@@ -3,32 +3,48 @@
 Applies to `hookfunction`, `hookmetamethod` / `__namecall`, `hooksignal`, and any
 interception of remotes.
 
-Hooks are rung 5 of the interaction ladder: the most powerful primitive and the
-most fragile. They change behaviour for **all** code in the game, not just yours.
-So the bar is higher than "it worked once".
+Hooks are the most powerful primitive available and the highest-maintenance one.
+They change behaviour for **all** code in the game, not just yours. They are also
+frequently the *fastest* option: a hook is event-driven, so it reacts the moment
+the game does, with no polling interval to wait out. Choosing one for that reason
+is a legitimate throughput decision — see `throughput.md`.
 
-**No hook gets written before this analysis exists.** Not as a formality — each
-step exists because skipping it produces a specific, recurring failure.
+**None of the steps below are permission gates.** Each is here because skipping it
+produces a specific, recurring failure, and each says which. Where a step needs a
+live client you may not have, it says what to do instead. Nothing here blocks
+writing a hook.
 
 ---
 
-## 1. Observe first, in pure pass-through
+## 1. Observe first, when you have a live client
 
-Run `snippets/namecall-logger.lua`. It installs a hook that changes nothing and
-only counts.
-
-> A hook that has never run as a logger does not ship.
-
-You cannot reason about a call surface you have not seen. The logger tells you
+`snippets/namecall-logger.lua` installs a hook that changes nothing and only counts.
+With a client running, it is by far the cheapest way to learn the real call surface:
 which methods actually fire, on which object classes, with which argument shapes.
+Guessing that from source reading takes far longer and is often wrong.
+
+**Without a live client, write the hook anyway.** Build the logger's pass-through
+shape into it as its first-run mode, so the measurement happens the first time
+someone does run it, and note in a comment that the rate is still unmeasured. An
+unmeasured hook that exists beats a measured one that was never written.
 
 ## 2. Quantify the blast radius
 
-A `__namecall` hook fires on **every** method call in the game. Before putting any
-logic in it, know the real rate — the logger prints calls/second.
+A `__namecall` hook fires on **every** method call in the game, so its cost is
+whatever you do per call multiplied by the game's own call rate. The logger prints
+that rate in calls/second.
 
-If that number is in the thousands, every comparison you add costs frame time on
-every game method call. Keep the fast path to a single comparison, and reject early.
+**Absent a measurement, assume the hot path runs in the thousands per second and
+write for it.** That costs nothing: keep the fast path to a single comparison and
+reject early, before any other work.
+
+```lua
+-- The whole fast path: one comparison, then out.
+if getnamecallmethod() ~= "FireServer" then return original(self, ...) end
+```
+
+Written that way the hook is cheap whether the real rate turns out to be 50/s or
+5000/s, and the measurement becomes a confirmation rather than a prerequisite.
 
 ## 3. Enumerate the call surface
 
@@ -119,10 +135,12 @@ A hub that reloads without restoring stacks hooks on top of each other.
 (`task.wait`, `:InvokeServer`, `HttpGet`, `:WaitForChild`) stalls the game's own
 code. Hand work off with `task.spawn` and return immediately.
 
-## 8. Never change behaviour for code you have not analysed
+## 8. Pass through what you have not analysed
 
-If the logger showed calls you do not understand, the hook passes them through
-untouched. "Probably unrelated" is how a hook breaks an unrelated feature.
+Calls you do not understand are best passed through untouched rather than swept into
+whatever transformation you are applying. "Probably unrelated" is how a hook breaks
+an unrelated feature — and a hook that broke something unrelated costs a debugging
+session, which is the most expensive thing that can happen to a fast build.
 
 ---
 

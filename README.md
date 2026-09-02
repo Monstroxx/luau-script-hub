@@ -41,19 +41,23 @@ It covers, in workflow order:
    library; per-game `core` / `registry` / `hub` split so a new feature is one
    registry entry. Includes the construction-callback trap and the `uiReady`
    guard.
-4. **The driver loop** — one loop, every job on its own thread, cooldown
-   stamped after the run, teardown re-checked inside each tick.
-5. **Interaction ladder** — choose the primitive that forges the least state,
-   from read-only up to hooks, with a probe script that measures which rung
-   actually applies to a target.
+4. **The driver loop and throughput** — one loop, every job on its own thread,
+   cooldown stamped after the run, teardown re-checked inside each tick; then
+   every limit sized by a measurement of the server's actual ceiling rather
+   than by a conservative guess.
+5. **Interaction ladder** — absent a measurement, prefer the primitive that
+   forges the least state, from read-only up to hooks; a probe script measures
+   which rung actually applies to a target, and the measurement outranks the
+   ladder when the two disagree.
 6. **State and obfuscation** — `getgenv()` namespacing, matching on values
    instead of names, `filtergc` as the precision tool.
 7. **Executor function names** — cross-checked against sUNC, Madium and the
    archived UNC list at once, with alias detection and portability flags.
 8. **Luau/platform deltas** — where Luau differs from Lua 5.1, the scheduler,
    and the client/server boundary.
-9. **Hooks** — mandatory pass-through logging and blast-radius analysis before
-   writing any `__namecall` hook.
+9. **Hooks** — pass-through logging and blast-radius analysis where a live
+   client allows it, a single-comparison fast path where it does not, and the
+   session lifecycle a hook has to be wired into.
 10. **Game data** — catalogs start empty and are filled from the game's own
     modules; `pcall` succeeding is not the server accepting.
 11. **Icons** — never guess an asset ID; the sheet script renders a labeled
@@ -65,7 +69,7 @@ It covers, in workflow order:
 | Path | Purpose |
 |---|---|
 | `SKILL.md` | The 11-step workflow, entry point for the agent |
-| `references/` | Deep-dive docs for each step (10 files) |
+| `references/` | Deep-dive docs for each step (11 files) |
 | `scripts/probe-env.sh` | Capability report for the local machine |
 | `scripts/syntax-check.sh` | Best available Luau parser, with self-test |
 | `scripts/exec-api.py` | Executor function lookup across three standards |

@@ -15,7 +15,9 @@ by a real failure.
 - **A failing guard pays its full interval.** Guards are not free — most fire
   blocking remotes. Re-checking a failed guard early turned eight idle "cheap, safe
   to leave running" toggles into **~32 remote round-trips per second**, none of
-  which the rate limiter saw.
+  which the rate limiter saw. This penalty is the price of *polling*: if the state
+  the guard reads is observable through a signal, wake on the signal instead and the
+  penalty disappears with the poll (`throughput.md`).
 
 - **Stamp the cooldown after the run**, not at tick start, or a job that yielded
   past its own interval comes back off cooldown immediately.
@@ -26,7 +28,10 @@ by a real failure.
 
 - **Rate-limit where the remotes actually are.** A bucket that counts *runs* is
   meaningless when one run sells 200 items. Batched functions take a `maxPerRun` and
-  defer the rest to the next interval.
+  defer the rest to the next interval. **Size the bucket by measurement, not by
+  feel** — `throughput.md` has the procedure for finding the server's actual ceiling,
+  and the rule that every such constant carries the number, the date and the method
+  in its comment.
 
 - **Walk the job list from a rotating offset**, or the entries at the front drain
   the budget every tick and the tail never runs. (A bucket that refills once a
@@ -93,7 +98,12 @@ than `warn` spam during this.
 ## Interval selection
 
 - Match the interval to how fast the underlying state actually changes, not to how
-  responsive it feels.
+  responsive it feels. **This cuts both ways**: an interval well above the rate the
+  state changes at is not caution, it is latency you chose. The interval is a
+  measured floor, not a comfort setting — see `throughput.md`.
 - A guard that costs a remote round-trip sets a floor on how often a job can be
-  cheap. Two jobs polling the same state at 1s are four round-trips a second.
+  cheap. Two jobs polling the same state at 1s are four round-trips a second. Share
+  the fetch or merge the jobs rather than slowing both.
 - Prefer one job that batches over several that each fire.
+- Where the game announces the change itself, prefer no interval at all: connect to
+  the signal instead of polling for its effects.

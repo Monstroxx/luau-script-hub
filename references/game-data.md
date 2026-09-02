@@ -77,6 +77,12 @@ forever. The clearest case: a server ignores requests for an already-maxed upgra
 so a capped first entry absorbed every point while the rest of the priority list was
 never reached — silently, indefinitely.
 
+Confirm every action while you are establishing that one works at all — it is also
+how you find the server's rate ceiling. Once the pattern is proven, the confirmation
+can drop to every *n*th action plus on any anomaly, which keeps the property that
+matters (a rejection cannot loop undetected) without paying a read-back every time.
+See `throughput.md`.
+
 ## RULE: Check the game's wiki, not just its code
 
 The code says what a remote *accepts*; it rarely says what a feature *is for* or how

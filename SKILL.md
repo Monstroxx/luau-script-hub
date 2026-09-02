@@ -55,18 +55,25 @@ once while building, so opening the hub writes `WalkSpeed`, `Gravity` and
 
 → `references/architecture.md`
 
-## Step 3 — The driver loop
+## Step 3 — The driver loop, and how fast it should run
 
 One loop. Every job on its own thread. A failing guard pays its full interval. Stamp
 cooldowns after the run. Re-check the teardown flag before each run, not just
 between ticks.
 
-→ `references/driver-loop.md`
+Then make it fast. Every rate limit, interval and `maxPerRun` should be a number
+someone **measured against the server's actual ceiling**, dated in a comment — a
+conservative constant nobody measured costs throughput forever and looks responsible
+doing it. Where the game announces a change itself, connect to that instead of
+polling for its effects.
+
+→ `references/driver-loop.md`, `references/throughput.md`
 
 ## Step 4 — Choose the interaction primitive
 
-**Use the primitive that forges the least state.** Work down the ladder; dropping a
-rung needs a reason you can state in a comment.
+**Absent a measurement, prefer the primitive that forges the least state.** The
+ladder is a default prior, not a permission ladder — once you have measured, choose
+by measured cost and record the number in a comment.
 
 ```
 0  read only                        5  hooks
@@ -77,7 +84,10 @@ rung needs a reason you can state in a comment.
 
 Measure instead of guessing — `snippets/probe-interaction.lua` reports which rungs
 actually apply to a target, including whether a signal can reach the server at all
-and whether the client even owns the part's physics.
+and whether the client even owns the part's physics. The measured-cheapest option is
+usually also the highest rung (a remote landed 12 of 12 collects from 300 studs, so
+the teleport it replaced was pure cost) — but when robustness and speed disagree, the
+measurement wins.
 
 Note: `firesignal` is **client-only** and never reaches the server; `replicatesignal`
 is the one that does.
@@ -132,19 +142,23 @@ scripts/rbx-docs.py --deprecated wait
 
 → `references/luau-and-roblox.md`
 
-## Step 8 — Hooks: analyse before you write one
+## Step 8 — Hooks
 
-Hooks are the bottom rung. A `__namecall` hook fires on **every** method call in the
-game and changes behaviour for all code, not just yours.
+A `__namecall` hook fires on **every** method call in the game and changes behaviour
+for all code, not just yours. It is also the fastest way to react to something,
+because it is event-driven and waits out no interval — a legitimate reason to pick
+one.
 
-**Mandatory before writing any hook:** run `snippets/namecall-logger.lua` in pure
-pass-through mode to see the real call surface and measure the blast radius. Then
-answer, in writing: *what could be manipulated through this, and which of that do we
-actually need?* The gap between those two is attack surface you would be building
-into your own tool.
+With a live client, `snippets/namecall-logger.lua` is the cheapest way to see the
+real call surface and measure the rate. **Without one, write the hook anyway**: keep
+the fast path to a single comparison and reject early, which is correct whether the
+real rate is 50/s or 5000/s, and build the logger's pass-through shape in as its
+first-run mode so the measurement still happens later.
 
-Keep the original, call through it, restore on teardown, and never yield inside a
-hook.
+A hook is session infrastructure, not a registry entry: it installs once, its restore
+hangs off the same teardown handle as the single-instance guard, and a UI toggle
+gates the *effect* inside the callback rather than installing and removing the hook.
+Keep the original, call through it, and never yield inside it.
 
 → `references/hooking-protocol.md`
 
@@ -192,6 +206,7 @@ functions.
 |---|---|
 | `references/architecture.md` | layering, three-file split, registry contract, `uiReady`, single-instance guard |
 | `references/driver-loop.md` | the eight loop rules and the `tryRun` sketch |
+| `references/throughput.md` | measuring the server's ceiling; batching, sampling, event-driven work |
 | `references/interaction-ladder.md` | which primitive to use, and where each breaks |
 | `references/hooking-protocol.md` | the mandatory analysis before any hook |
 | `references/environments-state.md` | where state lives; finding things by value |
