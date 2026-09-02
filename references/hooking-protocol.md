@@ -127,15 +127,50 @@ local mt = getrawmetatable(game)
 restorefunction(mt.__namecall)     -- or restoresignal() for hooksignal
 ```
 
-A hub that reloads without restoring stacks hooks on top of each other.
+A hub that reloads without restoring stacks hooks on top of each other — and unlike a
+stacked driver loop, which just wastes ticks, a stacked hook chain means the game
+itself is now calling through N dead closures on every method call. That is a
+throughput problem as much as a correctness one.
 
-## 7. Never yield inside a hook
+**"Restore on teardown" means the project's existing teardown, not a new one.** Every
+hub already has a single-instance guard with a handle for exactly this —
+`getgenv().__<GAME>_TEARDOWN` in this codebase, see `architecture.md`'s
+*Single-instance guard* section. Call `restorefunction` **from inside that same
+function**, next to whatever else it already tears down (the window, the driver
+loop's `stopped` flag). A hook restored by a mechanism the reload logic doesn't know
+about is a hook that survives the reload it was supposed to die with.
+
+## 7. Where the hook lives, and how it turns on and off
+
+A hook is **installed once, for the life of the session** — it is infrastructure, not
+a periodic job. It does not fit the registry's `interval`/`guard`/`run` contract
+(`driver-loop.md`) at all: there is nothing to poll, and calling `hookmetamethod`
+repeatedly on a timer would itself recreate the stacking problem above. Do not add a
+registry entry for a hook.
+
+Split it the same way as everything else (`architecture.md`'s three-file layering):
+
+- **What the hook does when it matches** — the actual decision logic — is game logic.
+  Put it in `<game>_core.lua` as a plain function the hook callback calls into, same
+  as any other automation.
+- **Installing the hook, holding the original, and restoring it** is session
+  lifecycle, like the single-instance guard and the driver loop itself. That code
+  belongs in the hub file, next to the teardown handle it must register with.
+
+**If the feature needs a UI on/off toggle, gate the effect, not the installation.**
+Keep the hook installed for the whole session and branch on a flag inside the
+callback (`if not S.MyFeatureEnabled then return original(self, ...) end`). Installing
+and un-installing `hookmetamethod` on every toggle flip is neither cheap nor
+guaranteed idempotent, and turns a UI checkbox into a second, untested path that can
+produce the exact stacked-hook failure above.
+
+## 8. Never yield inside a hook
 
 `__namecall` hooks and signal handlers run on the caller's thread. Yielding there
 (`task.wait`, `:InvokeServer`, `HttpGet`, `:WaitForChild`) stalls the game's own
 code. Hand work off with `task.spawn` and return immediately.
 
-## 8. Pass through what you have not analysed
+## 9. Pass through what you have not analysed
 
 Calls you do not understand are best passed through untouched rather than swept into
 whatever transformation you are applying. "Probably unrelated" is how a hook breaks

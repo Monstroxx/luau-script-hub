@@ -45,6 +45,11 @@ The hub generates the toggle, the state field and the loop job from that entry, 
 new feature is **one entry and nothing else**. Before this split, every automation
 was declared in three places and drifted between them.
 
+This contract is for **polled** automations only — `interval` is load-bearing. A
+hook, or anything else driven by an event the game fires, installs once for the
+session and does not become a registry entry; see `hooking-protocol.md` for where it
+goes instead, and `throughput.md` for when to prefer it over an interval.
+
 A registry usually also declares its tabs:
 
 ```lua
@@ -87,6 +92,11 @@ G.MyHub.session = session
 
 **Re-check the flag before each run, not just between ticks** — a run can yield for
 a minute, and the teardown may happen inside it.
+
+This same handle is where any hook's `restorefunction` call belongs too — see
+`hooking-protocol.md`. A hook that reloads without being wired into this teardown
+stacks exactly like an un-guarded driver loop does, except the game itself calls
+through the dead chain on every method call.
 
 ## Feature gating for server-authoritative games
 
